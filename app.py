@@ -9,7 +9,9 @@ import joblib
 
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parent
-TRAIN_CSV = PROJECT_ROOT / "Dataset" / "train.csv"
+TRAIN_CSV_PEKERJA = PROJECT_ROOT / "Dataset" / "DatasetPekerja.csv"
+TRAIN_CSV_DEFAULT = PROJECT_ROOT / "Dataset" / "train.csv"
+TRAIN_CSV = TRAIN_CSV_PEKERJA if TRAIN_CSV_PEKERJA.exists() else TRAIN_CSV_DEFAULT
 MODEL_DIR = PROJECT_ROOT / "model"
 
 # Set Streamlit Page Configuration
@@ -94,7 +96,7 @@ def load_raw_data() -> pd.DataFrame:
 @st.cache_resource
 def load_model_artifacts():
     """Load the trained model and preprocessing artifact from disk."""
-    model_path = MODEL_DIR / "rf_balanced_model.pkl"
+    model_path = MODEL_DIR / "rf_tuned_main.pkl"
     preprocessor_path = MODEL_DIR / "preprocessor.pkl"
 
     if not model_path.exists() or not preprocessor_path.exists():
