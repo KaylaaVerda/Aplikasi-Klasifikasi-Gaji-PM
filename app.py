@@ -156,20 +156,16 @@ def build_confusion_matrix_figure(cm, title: str):
 
 
 def predict_salary(model, artifact, user_input: dict) -> tuple[str, float]:
-    """Apply preprocessing and return the predicted class label and probability."""
+    """Apply preprocessing via full pipeline model and return the predicted class label and probability."""
     input_df = pd.DataFrame([user_input], columns=MODEL_FEATURES)
     input_df = input_df[MODEL_FEATURES]
 
+    # Convert to numeric
     for col in ["Umur", "Jmlh Tahun Pendidikan", "Keuntungan Kapital", "Kerugian Capital", "Jam per Minggu"]:
         input_df[col] = pd.to_numeric(input_df[col], errors="coerce")
 
-    iqr_bounds = artifact.get("iqr_bounds", {})
-    for col, (lower, upper) in iqr_bounds.items():
-        input_df[col] = input_df[col].clip(lower, upper)
-
-    preprocessor = artifact.get("preprocessor")
-    transformed = preprocessor.transform(input_df)
-    probability = float(model.predict_proba(transformed)[:, 1][0])
+    # Model is a full Pipeline with preprocessing, so pass raw data directly
+    probability = float(model.predict_proba(input_df)[:, 1][0])
     label = ">7jt" if probability >= 0.5 else "<=7jt"
     return label, probability
 
@@ -404,40 +400,43 @@ def main() -> None:
     # ==================== TAB 3: EVALUASI MODEL ====================
     with tabs[2]:
         st.header("Evaluasi Kinerja Model")
-        st.markdown("Perbandingan metrik evaluasi dan visualisasi performa model Random Forest yang telah dilatih.")
+        st.markdown("Perbandingan metrik evaluasi dan visualisasi performa lima model yang telah dilatih.")
 
         metrics = load_metrics_artifact()
         if not metrics:
             st.warning("File metrics belum tersedia. Jalankan train_model.py terlebih dahulu.")
             st.stop()
 
-        comparison_rows = []
-        for model_name in ["baseline", "weighted", "tuned"]:
-            if model_name not in metrics:
-                continue
-            report = metrics[model_name]["classification_report_dict"]
-            comparison_rows.append(
-                {
-                    "Model": model_name.replace("baseline", "Baseline").replace("weighted", "Weighted").replace("tuned", "Tuned"),
-                    "Accuracy": round(report["accuracy"], 4),
-                    "Precision (Macro)": round(report["macro avg"]["precision"], 4),
-                    "Recall (Macro)": round(report["macro avg"]["recall"], 4),
-                    "F1-Score (Macro)": round(report["macro avg"]["f1-score"], 4),
-                    "ROC-AUC": round(metrics[model_name]["roc_auc_score"], 4),
-                }
-            )
+        # Display comparison table (already pre-built with all 5 models)
+        comparison_table = metrics.get("comparison_table", [])
+        if comparison_table:
+            comparison_df = pd.DataFrame(comparison_table)
+            st.dataframe(comparison_df, use_container_width=True)
+        else:
+            st.warning("Comparison table tidak tersedia.")
+            st.stop()
 
-        comparison_df = pd.DataFrame(comparison_rows)
-        st.dataframe(comparison_df, use_container_width=True)
+        # Project Success Metrics Info Box
+        st.info(
+            "📊 **Metrik Kesuksesan Proyek:**\n\n"
+            "Target utama penelitian ini adalah mencapai:\n"
+            "- **Recall kelas >7jt > 0.75**: Model harus mampu mengidentifikasi setidaknya 75% dari pekerja berpenghasilan >7jt\n"
+            "- **ROC-AUC > 0.85**: Model harus memiliki discriminative ability yang baik\n\n"
+            f"**Status Model Utama (RF Tuned):**\n"
+            f"- Recall >7jt: {comparison_df[comparison_df['Model'] == 'RF Tuned']['Recall'].values[0]:.4f} "
+            f"({'✓ TERCAPAI' if comparison_df[comparison_df['Model'] == 'RF Tuned']['Recall'].values[0] > 0.75 else '✗ Belum tercapai'})\n"
+            f"- ROC-AUC: {comparison_df[comparison_df['Model'] == 'RF Tuned']['ROC-AUC'].values[0]:.4f} "
+            f"({'✓ TERCAPAI' if comparison_df[comparison_df['Model'] == 'RF Tuned']['ROC-AUC'].values[0] > 0.85 else '✗ Belum tercapai'})"
+        )
 
-        st.subheader("Confusion Matrix")
+        st.subheader("Confusion Matrix (Baseline vs Model Utama)")
         cm_col1, cm_col2 = st.columns(2)
         with cm_col1:
-            st.plotly_chart(build_confusion_matrix_figure(metrics["baseline"]["confusion_matrix"], "Baseline"), use_container_width=True)
+            st.plotly_chart(build_confusion_matrix_figure(metrics["baseline"]["confusion_matrix"], "RF Baseline"), use_container_width=True)
         with cm_col2:
-            st.plotly_chart(build_confusion_matrix_figure(metrics["tuned"]["confusion_matrix"], "Model Utama"), use_container_width=True)
+            st.plotly_chart(build_confusion_matrix_figure(metrics["tuned"]["confusion_matrix"], "RF Tuned (Model Utama)"), use_container_width=True)
 
-        st.subheader("Cross Validation F1-score per Fold")
+        st.subheader("Cross Validation F1-score per Fold (Model Utama)")
         cv_scores = metrics["tuned"].get("cv_scores_f1", [])
         if cv_scores:
             cv_df = pd.DataFrame({
@@ -458,7 +457,7 @@ def main() -> None:
         else:
             st.info("Tidak ada data cross-validation yang tersedia.")
 
-        st.subheader("Learning Curve")
+        st.subheader("Learning Curve (Model Utama)")
         curve = metrics["tuned"].get("learning_curve", {})
         if curve:
             fig_curve = go.Figure()
@@ -494,7 +493,7 @@ def main() -> None:
     # ==================== TAB 4: INTERPRETASI HASIL ====================
     with tabs[3]:
         st.header("Interpretasi & Insight Model")
-        st.markdown("Visualisasi fitur yang paling memengaruhi prediksi model utama, beserta interpretasi bisnis singkat.")
+        st.markdown("Visualisasi fitur yang paling memengaruhi prediksi model utama menggunakan tiga teknik interpretasi berbeda, beserta insight bisnis.")
 
         metrics = load_metrics_artifact()
         if not metrics:
@@ -502,6 +501,11 @@ def main() -> None:
             st.stop()
 
         tuned_metrics = metrics.get("tuned", {})
+        
+        # ========== Section 1: Feature Importance (Built-in) ==========
+        st.subheader("1. Feature Importance (Mean Decrease in Impurity)")
+        st.markdown("Metrik bawaan Random Forest berdasarkan peningkatan kemurnian (impurity) saat fitur dipilih dalam split tree.")
+        
         feature_importance = tuned_metrics.get("feature_importances", {})
         if feature_importance:
             names = feature_importance.get("names", [])
@@ -520,22 +524,87 @@ def main() -> None:
                     text="Pentingnya",
                     color="Pentingnya",
                     color_continuous_scale="Blues",
-                    title="Top 15 Fitur Terpenting Model Utama"
+                    title="Top 15 Fitur Berdasarkan Feature Importance"
                 )
-                fig_importance.update_layout(template="plotly_dark", yaxis={'autorange':'reversed'})
+                fig_importance.update_layout(template="plotly_dark", yaxis={'autorange':'reversed'}, height=500)
                 st.plotly_chart(fig_importance, use_container_width=True)
-
-                st.subheader("Insight bisnis")
-                st.markdown("""
-                - Fitur yang berkaitan dengan status sosial-ekonomi dan jenjang pendidikan, seperti Status Perkawinan, Umur, dan Jmlh Tahun Pendidikan, cenderung menjadi penentu utama dalam memprediksi apakah seseorang tergolong berpenghasilan <=7jt atau >7jt.
-                - Fitur kategorikal seperti Kelas Pekerja dan Pekerjaan juga memberikan kontribusi yang kuat karena mencerminkan struktur pekerjaan dan lapangan kerja yang berhubungan dengan tingkat pendapatan.
-                - Fitur Keuntungan Kapital dan Kerugian Capital tampak kurang dominan setelah proses IQR clipping, karena nilai ekstrem sudah dibatasi sehingga pengaruhnya menjadi lebih halus dan tidak lagi menjadi pemisah yang sangat kuat.
-                - Secara umum, model lebih banyak bergantung pada karakteristik demografis dan profesi yang mencerminkan stabilitas ekonomi seseorang daripada pada outlier transaksi finansial.
-                """)
             else:
                 st.info("Tidak tersedia data feature importance.")
         else:
             st.info("Tidak tersedia data feature importance.")
+
+        # ========== Section 2: Permutation Importance ==========
+        st.subheader("2. Permutation Importance (Model-Agnostic)")
+        st.markdown("Metrik ini mengukur penurunan performa ketika nilai fitur di-shuffle secara acak, menunjukkan kontribusi praktis setiap fitur.")
+        
+        perm_importance = tuned_metrics.get("permutation_importance", {})
+        if perm_importance:
+            perm_names = perm_importance.get("names", [])
+            perm_means = perm_importance.get("importances_mean", [])
+            perm_stds = perm_importance.get("importances_std", [])
+            if perm_names and perm_means:
+                perm_df = pd.DataFrame({
+                    "Fitur": perm_names,
+                    "Pentingnya": perm_means,
+                    "Std Dev": perm_stds,
+                }).sort_values("Pentingnya", ascending=False).head(15)
+
+                fig_perm = px.bar(
+                    perm_df,
+                    x="Pentingnya",
+                    y="Fitur",
+                    orientation="h",
+                    text="Pentingnya",
+                    error_x="Std Dev",
+                    color="Pentingnya",
+                    color_continuous_scale="Oranges",
+                    title="Top 15 Fitur Berdasarkan Permutation Importance"
+                )
+                fig_perm.update_layout(template="plotly_dark", yaxis={'autorange':'reversed'}, height=500)
+                st.plotly_chart(fig_perm, use_container_width=True)
+            else:
+                st.info("Tidak tersedia data permutation importance.")
+        else:
+            st.info("Tidak tersedia data permutation importance.")
+
+        # ========== Observation: Feature Importance vs Permutation Importance ==========
+        st.info(
+            "🔍 **Observasi Penting:** Perhatikan bahwa **Jenis Kelamin** menunjukkan importansi tinggi pada "
+            "feature importance bawaan, namun hampir tidak berkontribusi pada permutation importance. Ini adalah contoh klasik "
+            "**bias Mean Decrease in Impurity** terhadap fitur kategorikal dengan banyak dummy variable. "
+            "Feature importance bawaan cenderung overestimate pentingnya fitur dengan banyak kategori, sementara "
+            "permutation importance memberikan gambaran yang lebih akurat tentang kontribusi praktis fitur tersebut."
+        )
+
+        # ========== Section 3: SHAP Summary Plot ==========
+        st.subheader("3. SHAP Summary Plot (SHapley Additive exPlanations)")
+        st.markdown("Teknik interpretasi berbasis game theory yang menunjukkan dampak setiap fitur terhadap prediksi model untuk seluruh dataset uji (subsample 300 baris).")
+        
+        shap_image_path = MODEL_DIR / "shap_summary.png"
+        if shap_image_path.exists():
+            st.image(str(shap_image_path), caption="SHAP Summary Plot: Distribusi dampak fitur terhadap prediksi kelas >7jt", use_column_width=True)
+        else:
+            st.warning("File SHAP summary plot belum tersedia.")
+
+        # ========== Insight Bisnis ==========
+        st.subheader("Insight Bisnis dari Ketiga Teknik Interpretasi")
+        st.markdown("""
+        **Konsistensi Antar Teknik:**
+        
+        Ketiga teknik interpretasi (feature importance bawaan, permutation importance, dan SHAP) secara konsisten mengidentifikasi 
+        **Status Perkawinan**, **Jmlh Tahun Pendidikan**, dan **Umur** sebagai fitur-fitur yang paling berpengaruh terhadap prediksi kategori gaji:
+        
+        - **Status Perkawinan**: Mencerminkan stabilitas keluarga dan potensi dual income, yang berkorelasi kuat dengan tingkat gaji.
+        - **Jmlh Tahun Pendidikan**: Semakin tinggi durasi pendidikan, semakin besar peluang untuk meniti karir yang menguntungkan.
+        - **Umur**: Berkaitan dengan pengalaman kerja dan matang dalam karir.
+        
+        **Implikasi Praktis:**
+        
+        - Fitur demografis dan sosial-ekonomi (status perkawinan, pendidikan, usia, pekerjaan) adalah determinan utama gaji di dataset ini.
+        - Fitur finansial (Keuntungan/Kerugian Kapital) memiliki kontribusi marginal setelah normalisasi outlier.
+        - Model ini dapat digunakan untuk identifikasi pekerja dengan potensi gaji tinggi untuk program pengembangan karir atau retensi.
+        """)
+
 
     # ==================== TAB 5: DOKUMENTASI ====================
     with tabs[4]:
@@ -545,22 +614,27 @@ def main() -> None:
         st.markdown("""
         Dataset yang digunakan dalam proyek ini diadaptasi dari **UCI Adult Census Income Dataset** (Kohavi, 1996) 
         yang memuat profil sosio-demografis dan pekerjaan individu untuk memprediksi tingkat pendapatan. 
-        Dataset mentah (`train.csv`) memiliki total baris **36.017 baris** dan **12 kolom** (fitur).
+        Dataset mentah (`train.csv`) memiliki total baris **35.994 baris** dan **13 kolom** (fitur).
+        
+        **Distribusi Target:**
+        - **Kelas ≤7jt (Gaji Rendah)**: 27.364 baris (~76%)
+        - **Kelas >7jt (Gaji Tinggi)**: 8.630 baris (~24%)
+        - **Rasio Imbalance**: Sekitar 3.17:1, menunjukkan ketidakseimbangan kelas yang signifikan.
         """)
         
         # Column description table
         doc_cols = pd.DataFrame([
             {"Nama Fitur": "id", "Tipe": "Numerik", "Deskripsi": "Indeks / Nomor Urut data (Dihapus dari Pemodelan)"},
-            {"Nama Fitur": "Umur", "Tipe": "Numerik", "Deskripsi": "Usia Pekerja (di-clipping dalam batas IQR [1 - 79] tahun)"},
+            {"Nama Fitur": "Umur", "Tipe": "Numerik", "Deskripsi": "Usia Pekerja (di-clipping dalam batas IQR [-1 - 79] tahun)"},
             {"Nama Fitur": "Kelas Pekerja", "Tipe": "Kategorik", "Deskripsi": "Sektor ketenagakerjaan (Wiraswasta, Pekerja Negara, dll.)"},
             {"Nama Fitur": "Pendidikan", "Tipe": "Kategorik (Ordinal)", "Deskripsi": "Tingkat pendidikan tertinggi (SD hingga Doktor)"},
             {"Nama Fitur": "Jmlh Tahun Pendidikan", "Tipe": "Numerik", "Deskripsi": "Lama durasi menempuh pendidikan dalam tahun"},
             {"Nama Fitur": "Status Perkawinan", "Tipe": "Kategorik", "Deskripsi": "Status perkawinan pekerja (Menikah, Belum Menikah, Cerai, dll.)"},
             {"Nama Fitur": "Pekerjaan", "Tipe": "Kategorik", "Deskripsi": "Sektor pekerjaan spesifik pekerja (Manajerial, Spesialis, dll.)"},
-            {"Nama Fituk": "Jenis Kelamin", "Tipe": "Kategorik", "Deskripsi": "Jenis kelamin pekerja (Laki2, Perempuan)"},
-            {"Nama Fitur": "Keuntungan Kapital", "Tipe": "Numerik", "Deskripsi": "Keuntungan dari investasi keuangan (di-clipping IQR ke 0)"},
-            {"Nama Fitur": "Kerugian Capital", "Tipe": "Numerik", "Deskripsi": "Kerugian dari investasi keuangan (di-clipping IQR ke 0)"},
-            {"Nama Fitur": "Jam per Minggu", "Tipe": "Numerik", "Deskripsi": "Jumlah jam kerja per minggu (di-clipping IQR ke [26 - 58] jam)"},
+            {"Nama Fituk": "Jenis Kelamin", "Tipe": "Kategorik", "Deskripsi": "Jenis kelamin pekerja (Laki-laki, Perempuan)"},
+            {"Nama Fitur": "Keuntungan Kapital", "Tipe": "Numerik", "Deskripsi": "Keuntungan dari investasi keuangan (di-clipping IQR ke [0.0 - 0.0])"},
+            {"Nama Fitur": "Kerugian Capital", "Tipe": "Numerik", "Deskripsi": "Kerugian dari investasi keuangan (di-clipping IQR ke [0.0 - 0.0])"},
+            {"Nama Fitur": "Jam per Minggu", "Tipe": "Numerik", "Deskripsi": "Jumlah jam kerja per minggu (di-clipping IQR ke [26.0 - 58.0] jam)"},
             {"Nama Fitur": "Gaji (Target)", "Tipe": "Kategorik", "Deskripsi": "Kategori Gaji Pekerja (<=7jt atau >7jt)"}
         ])
         st.table(doc_cols)
@@ -572,22 +646,51 @@ def main() -> None:
           - **Handling Missing Values**: Nilai hilang diimputasi menggunakan metode *Mode* (nilai tersering/`most_frequent`) menggunakan `SimpleImputer` di dalam pipeline.
           - **Handling Outlier**: Digunakan metode *IQR Clipping* dengan batas $[Q1 - 1.5 \\times IQR, Q3 + 1.5 \\times IQR]$ pada kolom numerik (`Umur`, `Keuntungan Kapital`, `Kerugian Capital`, `Jam per Minggu`) untuk membatasi rentang nilai ekstrim tanpa membuang baris data.
           - **Encoding**: 
-            - *OrdinalEncoder* diterapkan pada kolom `Pendidikan` berdasarkan urutan logis (SD -> SMA -> D3 -> Sarjana -> Master -> Doktor).
+            - *OrdinalEncoder* diterapkan pada kolom `Pendidikan` berdasarkan urutan logis (SD → 1st-4th → ... → Sarjana → Master → Doktor).
             - *OneHotEncoder* dengan parameter `handle_unknown='ignore'` diterapkan pada variabel nominal.
           - **Scaling**: Standardisasi data menggunakan `StandardScaler` untuk menyamakan skala fitur-fitur numerik.
-        - **Algoritma Permodelan**:
-          - Menggunakan **Random Forest Classifier** yang merupakan algoritma *ensemble* (berbasis bagging) yang sangat andal menangani fitur campuran (numerik & kategorikal) serta hubungan non-linear.
+        
+        - **Algoritma Permodelan (5 Model Komparatif)**:
+          1. **RF Baseline**: RandomForestClassifier dengan n_estimators=100, random_state=42 (baseline standar)
+          2. **RF Weighted**: RandomForestClassifier dengan class_weight='balanced' untuk mengatasi imbalance
+          3. **RF Tuned (Model Utama)**: Hasil RandomizedSearchCV dengan 8 iterasi, scoring='f1', 3-fold StratifiedKFold CV
+             - Grid search: n_estimators ∈ [100,150,200], max_depth ∈ [10,15,20,None], min_samples_leaf ∈ [1,5,10], min_samples_split ∈ [2,10], max_features ∈ ['sqrt','log2']
+          4. **Logistic Regression**: LogisticRegression dengan class_weight='balanced', max_iter=1000
+          5. **XGBoost**: XGBClassifier dengan scale_pos_weight (ratio kelas), n_estimators=200, max_depth=6, learning_rate=0.1
+        
         - **Mengatasi Imbalance Class**:
-          - Karena proporsi kelas target tidak seimbang (hanya ~24% berpenghasilan >7jt), model utama dikonfigurasi dengan parameter `class_weight='balanced'` guna memberikan penalti kesalahan lebih tinggi pada kelas minoritas demi meningkatkan Recall dan skor F1.
+          - Karena proporsi kelas target tidak seimbang (~24% berpenghasilan >7jt), semua model dikonfigurasi dengan strategi penanganan imbalance:
+            - Random Forest menggunakan `class_weight='balanced'`
+            - Logistic Regression menggunakan `class_weight='balanced'`
+            - XGBoost menggunakan `scale_pos_weight` berdasarkan rasio kelas di training data
+        
+        - **Teknik Interpretasi Model (3 Metode)**:
+          1. **Feature Importance (Mean Decrease in Impurity)**: Metrik bawaan Random Forest berdasarkan penurunan impurity dalam tree splits
+          2. **Permutation Importance**: Metrik model-agnostic yang mengukur perubahan performa saat fitur di-shuffle (n_repeats=10, scoring='f1')
+          3. **SHAP (SHapley Additive exPlanations)**: Teknik game theory yang menunjukkan dampak setiap fitur pada prediksi menggunakan TreeExplainer (subsample 300 baris test set, seed=42)
         """)
         
-        st.subheader("3. Panduan Penggunaan Aplikasi")
+        st.subheader("3. Metrik Kesuksesan Proyek")
         st.markdown("""
-        - **Dashboard EDA**: Membantu pengguna memvisualisasikan data mentah, sebaran kategori gaji, dan hubungan antar variabel melalui chart interaktif.
-        - **Model Demo**: Memungkinkan pengguna memasukkan profil pekerja (umur, pendidikan, pekerjaan, dll.) untuk melihat prediksi kategori gajinya secara instan.
-        - **Evaluasi Model**: Berisi perbandingan kinerja 3 model Random Forest serta kurva pembelajaran (learning curve) untuk memantau bias dan variansi model.
-        - **Interpretasi Hasil**: Membantu analis/pengguna memahami fitur mana yang paling memengaruhi keputusan prediksi model utama.
+        Proyek ini menetapkan target performa model yang spesifik berdasarkan kebutuhan bisnis:
+        
+        - **Recall untuk kelas >7jt > 0.75**: Model harus mampu mengidentifikasi setidaknya 75% dari pekerja berpenghasilan tinggi (minimize False Negative)
+        - **ROC-AUC > 0.85**: Model harus memiliki discriminative ability yang baik, membedakan kedua kelas dengan akurat di berbagai threshold
+        
+        Target ini dipilih untuk menyeimbangkan:
+        - **Sensitivity** (Recall tinggi): Penting untuk program targeting dan intervensi bisnis yang tepat
+        - **Discrimination** (ROC-AUC tinggi): Memastikan model tidak hanya recall tinggi tapi juga presisi yang memadai
         """)
+        
+        st.subheader("4. Panduan Penggunaan Aplikasi")
+        st.markdown("""
+        - **Dashboard EDA** (Tab 1): Membantu pengguna memvisualisasikan data mentah, sebaran kategori gaji, dan hubungan antar variabel melalui chart interaktif.
+        - **Model Demo** (Tab 2): Memungkinkan pengguna memasukkan profil pekerja (umur, pendidikan, pekerjaan, dll.) untuk melihat prediksi kategori gajinya secara instan menggunakan RF Tuned.
+        - **Evaluasi Model** (Tab 3): Berisi perbandingan kinerja lima model (RF Baseline, RF Weighted, RF Tuned, Logistic Regression, XGBoost) serta kurva pembelajaran dan cross-validation untuk memantau model utama.
+        - **Interpretasi Hasil** (Tab 4): Membantu analis/pengguna memahami fitur mana yang paling memengaruhi prediksi dengan tiga teknik interpretasi: feature importance, permutation importance, dan SHAP.
+        - **Dokumentasi** (Tab 5): Referensi lengkap tentang dataset, metodologi, metrik kesuksesan, dan panduan penggunaan aplikasi.
+        """)
+
 
 
 if __name__ == "__main__":
