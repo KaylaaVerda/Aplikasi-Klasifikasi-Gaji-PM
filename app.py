@@ -178,7 +178,7 @@ def main() -> None:
     
     # App Header
     st.markdown('<div class="title-gradient">💰 Salary Classifier Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle-text">Prediksi dan Analisis Kategori Gaji Pekerja berbasis Machine Learning (Random Forest)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle-text">Prediksi dan Analisis Kategori Gaji Pekerja berbasis Machine Learning (Random Forest dengan Pendekatan Class Weighting)</div>', unsafe_allow_html=True)
 
     # 5 Tabs
     tabs = st.tabs([
@@ -341,7 +341,7 @@ def main() -> None:
     # ==================== TAB 2: MODEL DEMO ====================
     with tabs[1]:
         st.header("Demo Prediksi Kategori Gaji")
-        st.markdown("Masukkan profil pekerja untuk melihat prediksi kategori gaji berdasarkan model Random Forest yang sudah dilatih.")
+        st.markdown("Masukkan profil pekerja untuk melihat prediksi kategori gaji berdasarkan model Random Forest dengan Pendekatan Class Weighting yang sudah dilatih.")
 
         model, artifact = load_model_artifacts()
         if model is None or artifact is None:
@@ -429,12 +429,38 @@ def main() -> None:
             f"({'✓ TERCAPAI' if comparison_df[comparison_df['Model'] == 'RF Tuned']['ROC-AUC'].values[0] > 0.85 else '✗ Belum tercapai'})"
         )
 
-        st.subheader("Confusion Matrix (Baseline vs Model Utama)")
-        cm_col1, cm_col2 = st.columns(2)
+        st.subheader("Confusion Matrix (Semua Model)")
+        cm_col1, cm_col2, cm_col3 = st.columns(3)
         with cm_col1:
             st.plotly_chart(build_confusion_matrix_figure(metrics["baseline"]["confusion_matrix"], "RF Baseline"), use_container_width=True)
         with cm_col2:
             st.plotly_chart(build_confusion_matrix_figure(metrics["tuned"]["confusion_matrix"], "RF Tuned (Model Utama)"), use_container_width=True)
+        with cm_col3:
+            st.plotly_chart(build_confusion_matrix_figure(metrics["logreg"]["confusion_matrix"], "Logistic Regression"), use_container_width=True)
+        
+        st.subheader("Perbandingan Metrik Evaluasi Lima Model")
+        # Melt the comparison dataframe for plotting
+        comparison_melt = comparison_df.melt(id_vars=["Model"], value_vars=["Accuracy", "Precision", "Recall", "F1-Score", "ROC-AUC"], var_name="Metric", value_name="Value")
+        
+        fig_comparison = px.bar(
+            comparison_melt,
+            x="Model",
+            y="Value",
+            color="Metric",
+            barmode="group",
+            title="Perbandingan Metrik Evaluasi Lima Model",
+            color_discrete_map={
+                "Accuracy": "#4D96FF",
+                "Precision": "#FF6B6B", 
+                "Recall": "#6BCB77", 
+                "F1-Score": "#FFD93D", 
+                "ROC-AUC": "#9B59B6"
+            },
+            text_auto=".3f",
+            height=500
+        )
+        fig_comparison.update_layout(template="plotly_dark")
+        st.plotly_chart(fig_comparison, use_container_width=True)
 
         st.subheader("Cross Validation F1-score per Fold (Model Utama)")
         cv_scores = metrics["tuned"].get("cv_scores_f1", [])
