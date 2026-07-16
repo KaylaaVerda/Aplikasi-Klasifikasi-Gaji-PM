@@ -366,8 +366,8 @@ def main() -> None:
             with col2:
                 pekerjaan = st.selectbox("Pekerjaan", options=categorical_options["Pekerjaan"])
                 jenis_kelamin = st.selectbox("Jenis Kelamin", options=categorical_options["Jenis Kelamin"])
-                keuntungan_kapital = st.number_input("Keuntungan Kapital", min_value=0, value=0, step=1, format="%.0f")
-                kerugian_capital = st.number_input("Kerugian Capital", min_value=0, value=0, step=1, format="%.0f")
+                keuntungan_kapital = st.number_input("Keuntungan Kapital", min_value=0, value=0, step=1)
+                kerugian_capital = st.number_input("Kerugian Capital", min_value=0, value=0, step=1)
                 jam_per_minggu = st.number_input("Jam per Minggu", min_value=0, max_value=100, value=40, step=1)
 
             submitted = st.form_submit_button("Prediksi")
