@@ -691,7 +691,7 @@ def main() -> None:
         st.markdown("""
         Dataset yang digunakan dalam proyek ini diadaptasi dari **UCI Adult Census Income Dataset** (Kohavi, 1996) 
         yang memuat profil sosio-demografis dan pekerjaan individu untuk memprediksi tingkat pendapatan. 
-        Dataset mentah (`train.csv`) memiliki total baris **35.994 baris** dan **13 kolom** (fitur).
+        Dataset mentah (`DatasetPekerja.csv`) memiliki total baris **35.994 baris** dan **13 kolom** (fitur).
         
         **Distribusi Target:**
         - **Kelas ≤7jt (Gaji Rendah)**: 27.364 baris (~76%)
