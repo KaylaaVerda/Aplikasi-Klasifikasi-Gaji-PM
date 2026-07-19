@@ -45,6 +45,7 @@ streamlit run app.py
 ```
 
 Aplikasi akan tersedia di `http://localhost:8501`.
+Link Aplikasi setelah di deploy `https://klasifikasigajipm.streamlit.app/`
 
 ## Fitur yang tersedia
 
