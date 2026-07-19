@@ -39,6 +39,7 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         font-weight: 700;
         font-size: 2.8rem;
+        margin-top: -2rem;
         margin-bottom: 0.2rem;
     }
     
@@ -46,7 +47,7 @@ st.markdown("""
         color: #A5F3FC;
         font-size: 1.1rem;
         font-weight: 400;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem;
     }
     
     /* Custom Card Styling */
@@ -170,16 +171,66 @@ def predict_salary(model, artifact, user_input: dict) -> tuple[str, float]:
     return label, probability
 
 
+def render_footer():
+    st.markdown("""
+    <style>
+        .footer {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background-color: #0e1117;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+            font-size: 14px;
+            z-index: 999;
+        }
+    </style>
+    <div class="footer">
+        © KAYLA VERDA - A11.2024.15689
+    </div>
+    """, unsafe_allow_html=True)
+
 def main() -> None:
     # Sidebar
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3135/3135706.png", width=80)
     st.sidebar.markdown("### Salary Predictor & EDA Portal")
     st.sidebar.info("Gunakan navigasi tab di sebelah kanan untuk menjelajahi aplikasi.")
     
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ⭐ Ujian Akhir Semester ⭐")
+    st.sidebar.markdown("### Pembelajaran mesin")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 👩‍💻 Developer")
+    st.sidebar.markdown("""
+    <style>
+        .dev-info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .dev-label {
+            font-weight: bold;
+            text-align: left;
+        }
+    </style>
+    <div class="dev-info-grid">
+        <span class="dev-label">Nama</span>
+        <span>: Kayla Verda Fawnia Heses</span>
+        <span class="dev-label">NIM</span>
+        <span>: A11.2024.15689</span>
+        <span class="dev-label">Kelas</span>
+        <span>: A11.4404</span>
+    </div>
+    """, unsafe_allow_html=True)
+    st.sidebar.markdown("Teknik Informatika – Universitas Dian Nuswantoro")
+    
     # App Header
     st.markdown('<div class="title-gradient">💰 Salary Classifier Dashboard</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle-text">Prediksi dan Analisis Kategori Gaji Pekerja berbasis Machine Learning (Random Forest dengan Pendekatan Class Weighting)</div>', unsafe_allow_html=True)
-
+    
     # 5 Tabs
     tabs = st.tabs([
         "📊 Dashboard EDA",
@@ -235,7 +286,7 @@ def main() -> None:
         stat_col1, stat_col2 = st.columns([2, 1])
         with stat_col1:
             st.markdown("##### Statistik Deskriptif Fitur Numerik")
-            st.dataframe(df_raw.describe().round(2), use_container_width=True)
+            st.dataframe(df_raw.describe().round(2), width='stretch')
         with stat_col2:
             st.markdown("##### Nilai Hilang per Kolom")
             # Replace "?" to nan to count missing values
@@ -246,7 +297,7 @@ def main() -> None:
                 "Missing Values": missing_series.values,
                 "Persentase": (missing_series.values / len(df_raw) * 100).round(2)
             })
-            st.dataframe(missing_df[missing_df["Missing Values"] > 0].reset_index(drop=True), use_container_width=True)
+            st.dataframe(missing_df[missing_df["Missing Values"] > 0].reset_index(drop=True), width='stretch')
             
         st.divider()
         
@@ -268,7 +319,7 @@ def main() -> None:
                 title="Jumlah Pekerja per Kategori Gaji"
             )
             fig_bar.update_layout(showlegend=False, template="plotly_dark")
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width='stretch')
             
         with dist_col2:
             fig_pie = px.pie(
@@ -281,7 +332,7 @@ def main() -> None:
                 title="Proporsi Kategori Gaji"
             )
             fig_pie.update_layout(template="plotly_dark")
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width='stretch')
             
         st.divider()
         
@@ -315,7 +366,7 @@ def main() -> None:
                 title=f"Distribusi {selected_feature} berdasarkan Kategori Gaji"
             )
             fig_relation.update_layout(template="plotly_dark")
-            st.plotly_chart(fig_relation, use_container_width=True)
+            st.plotly_chart(fig_relation, width='stretch')
         else:
             # Categorical - Plot a stacked/grouped proportion bar chart
             # First, group by selected feature and Gaji
@@ -336,7 +387,7 @@ def main() -> None:
                 labels={"Proporsi": "Proporsi Pekerja"}
             )
             fig_relation.update_layout(yaxis_tickformat=".0%", template="plotly_dark")
-            st.plotly_chart(fig_relation, use_container_width=True)
+            st.plotly_chart(fig_relation, width='stretch')
 
     # ==================== TAB 2: MODEL DEMO ====================
     with tabs[1]:
@@ -411,7 +462,7 @@ def main() -> None:
         comparison_table = metrics.get("comparison_table", [])
         if comparison_table:
             comparison_df = pd.DataFrame(comparison_table)
-            st.dataframe(comparison_df, use_container_width=True)
+            st.dataframe(comparison_df, width='stretch')
         else:
             st.warning("Comparison table tidak tersedia.")
             st.stop()
@@ -432,11 +483,11 @@ def main() -> None:
         st.subheader("Confusion Matrix (Semua Model)")
         cm_col1, cm_col2, cm_col3 = st.columns(3)
         with cm_col1:
-            st.plotly_chart(build_confusion_matrix_figure(metrics["baseline"]["confusion_matrix"], "RF Baseline"), use_container_width=True)
+            st.plotly_chart(build_confusion_matrix_figure(metrics["baseline"]["confusion_matrix"], "RF Baseline"), width='stretch')
         with cm_col2:
-            st.plotly_chart(build_confusion_matrix_figure(metrics["tuned"]["confusion_matrix"], "RF Tuned (Model Utama)"), use_container_width=True)
+            st.plotly_chart(build_confusion_matrix_figure(metrics["tuned"]["confusion_matrix"], "RF Tuned (Model Utama)"), width='stretch')
         with cm_col3:
-            st.plotly_chart(build_confusion_matrix_figure(metrics["logreg"]["confusion_matrix"], "Logistic Regression"), use_container_width=True)
+            st.plotly_chart(build_confusion_matrix_figure(metrics["logreg"]["confusion_matrix"], "Logistic Regression"), width='stretch')
         
         st.subheader("Perbandingan Metrik Evaluasi Lima Model")
         # Melt the comparison dataframe for plotting
@@ -460,7 +511,7 @@ def main() -> None:
             height=500
         )
         fig_comparison.update_layout(template="plotly_dark")
-        st.plotly_chart(fig_comparison, use_container_width=True)
+        st.plotly_chart(fig_comparison, width='stretch')
 
         st.subheader("Cross Validation F1-score per Fold (Model Utama)")
         cv_scores = metrics["tuned"].get("cv_scores_f1", [])
@@ -479,7 +530,7 @@ def main() -> None:
                 color_continuous_scale="Blues",
             )
             fig_cv.update_layout(template="plotly_dark")
-            st.plotly_chart(fig_cv, use_container_width=True)
+            st.plotly_chart(fig_cv, width='stretch')
         else:
             st.info("Tidak ada data cross-validation yang tersedia.")
 
@@ -512,7 +563,7 @@ def main() -> None:
                 yaxis_title="Rata-rata F1-score",
                 margin=dict(t=40, l=20, r=20, b=20),
             )
-            st.plotly_chart(fig_curve, use_container_width=True)
+            st.plotly_chart(fig_curve, width='stretch')
         else:
             st.info("Tidak ada data learning curve yang tersedia.")
 
@@ -553,7 +604,7 @@ def main() -> None:
                     title="Top 15 Fitur Berdasarkan Feature Importance"
                 )
                 fig_importance.update_layout(template="plotly_dark", yaxis={'autorange':'reversed'}, height=500)
-                st.plotly_chart(fig_importance, use_container_width=True)
+                st.plotly_chart(fig_importance, width='stretch')
             else:
                 st.info("Tidak tersedia data feature importance.")
         else:
@@ -587,7 +638,7 @@ def main() -> None:
                     title="Top 15 Fitur Berdasarkan Permutation Importance"
                 )
                 fig_perm.update_layout(template="plotly_dark", yaxis={'autorange':'reversed'}, height=500)
-                st.plotly_chart(fig_perm, use_container_width=True)
+                st.plotly_chart(fig_perm, width='stretch')
             else:
                 st.info("Tidak tersedia data permutation importance.")
         else:
@@ -608,7 +659,7 @@ def main() -> None:
         
         shap_image_path = MODEL_DIR / "shap_summary.png"
         if shap_image_path.exists():
-            st.image(str(shap_image_path), caption="SHAP Summary Plot: Distribusi dampak fitur terhadap prediksi kelas >7jt", use_column_width=True)
+            st.image(str(shap_image_path), caption="SHAP Summary Plot: Distribusi dampak fitur terhadap prediksi kelas >7jt", width='stretch')
         else:
             st.warning("File SHAP summary plot belum tersedia.")
 
@@ -716,7 +767,8 @@ def main() -> None:
         - **Interpretasi Hasil** (Tab 4): Membantu analis/pengguna memahami fitur mana yang paling memengaruhi prediksi dengan tiga teknik interpretasi: feature importance, permutation importance, dan SHAP.
         - **Dokumentasi** (Tab 5): Referensi lengkap tentang dataset, metodologi, metrik kesuksesan, dan panduan penggunaan aplikasi.
         """)
-
+    
+    render_footer()
 
 
 if __name__ == "__main__":
